@@ -90,16 +90,21 @@
         sc.height = img.height;
         const sctx = sc.getContext('2d');
         sctx.drawImage(img, 0, 0);
-        const imageData = sctx.getImageData(0, 0, sc.width, sc.height);
-        const d = imageData.data;
-        for (let i = 0; i < d.length; i += 4) {
-          const r = d[i], g = d[i+1], b = d[i+2];
-          // Chroma key: remove green background
-          if (g > 100 && g > r * 1.2 && g > b * 1.2 && g > 80) {
-            d[i+3] = 0;
+        try {
+          const imageData = sctx.getImageData(0, 0, sc.width, sc.height);
+          const d = imageData.data;
+          for (let i = 0; i < d.length; i += 4) {
+            const r = d[i], g = d[i+1], b = d[i+2];
+            // Chroma key: remove green background
+            if (g > 100 && g > r * 1.2 && g > b * 1.2 && g > 80) {
+              d[i+3] = 0;
+            }
           }
+          sctx.putImageData(imageData, 0, 0);
+        } catch (e) {
+          // CORS restriction (e.g. file:// protocol) — use sprites as-is
+          console.warn('Chroma key skipped:', e.message);
         }
-        sctx.putImageData(imageData, 0, 0);
         spriteCanvas = sc;
         spriteReady = true;
         cb();
@@ -109,6 +114,7 @@
         spriteReady = false;
         cb();
       };
+      img.crossOrigin = 'anonymous';
       img.src = 'assets/sprites.png';
     }
 
