@@ -25,21 +25,11 @@
       max-width: 100vw;
       max-height: 100vh;
     }
-    #landscape-hint {
-      display: none;
-      color: #fff;
-      font-size: 18px;
-      text-align: center;
-      padding: 20px;
-    }
-    @media (max-width: 600px) and (orientation: portrait) {
-      #landscape-hint { display: block; }
-      #gameCanvas { display: none; }
-    }
+    #landscape-hint { display: none; }
   </style>
 </head>
 <body>
-  <div id="landscape-hint">📱 Rotá el teléfono para jugar mejor!</div>
+  <div id="landscape-hint"></div>
   <canvas id="gameCanvas"></canvas>
 
   <script>
@@ -82,40 +72,45 @@
     let spriteCanvas = null;
     let spriteReady = false;
 
+    function applyChromaKey(sctx, w, h) {
+      const imageData = sctx.getImageData(0, 0, w, h);
+      const d = imageData.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const r = d[i], g = d[i+1], b = d[i+2];
+        if (g > 100 && g > r * 1.2 && g > b * 1.2 && g > 80) d[i+3] = 0;
+      }
+      sctx.putImageData(imageData, 0, 0);
+    }
+
     function loadSprites(cb) {
-      const img = new Image();
-      img.onload = function() {
-        const sc = document.createElement('canvas');
-        sc.width = img.width;
-        sc.height = img.height;
-        const sctx = sc.getContext('2d');
-        sctx.drawImage(img, 0, 0);
-        try {
-          const imageData = sctx.getImageData(0, 0, sc.width, sc.height);
-          const d = imageData.data;
-          for (let i = 0; i < d.length; i += 4) {
-            const r = d[i], g = d[i+1], b = d[i+2];
-            // Chroma key: remove green background
-            if (g > 100 && g > r * 1.2 && g > b * 1.2 && g > 80) {
-              d[i+3] = 0;
-            }
+      function tryLoad(withCORS) {
+        const img = new Image();
+        img.onload = function() {
+          const sc = document.createElement('canvas');
+          sc.width = img.width;
+          sc.height = img.height;
+          const sctx = sc.getContext('2d');
+          sctx.drawImage(img, 0, 0);
+          try {
+            applyChromaKey(sctx, sc.width, sc.height);
+          } catch (e) {
+            if (withCORS) { tryLoad(false); return; }
+            // file:// without CORS: sprites render with green bg, still usable
+            console.warn('Chroma key skipped (file:// context)');
           }
-          sctx.putImageData(imageData, 0, 0);
-        } catch (e) {
-          // CORS restriction (e.g. file:// protocol) — use sprites as-is
-          console.warn('Chroma key skipped:', e.message);
-        }
-        spriteCanvas = sc;
-        spriteReady = true;
-        cb();
-      };
-      img.onerror = function() {
-        // Sprite failed to load — run without sprites
-        spriteReady = false;
-        cb();
-      };
-      img.crossOrigin = 'anonymous';
-      img.src = 'assets/sprites.png';
+          spriteCanvas = sc;
+          spriteReady = true;
+          cb();
+        };
+        img.onerror = function() {
+          if (withCORS) { tryLoad(false); return; }
+          spriteReady = false;
+          cb();
+        };
+        if (withCORS) img.crossOrigin = 'anonymous';
+        img.src = 'assets/sprites.png';
+      }
+      tryLoad(true);
     }
 
     // Draw a sprite region onto the main canvas
@@ -205,17 +200,13 @@
     // Title animation
     let titleBob = 0;
 
-    // Timing window (shrinks with kills)
-    function getTimingWindow() {
-      return Math.max(400, 1200 - Math.floor(kills / 5) * 100);
-    }
     // Miss window = how long TIMING state lasts before becoming MISS
     function getMissDelay() {
-      return Math.max(500, 1500 - Math.floor(kills / 5) * 100);
+      return Math.max(350, 900 - Math.floor(kills / 5) * 80);
     }
     // Enemy speed (increases with kills)
     function getEnemySpeed() {
-      return 80 + Math.floor(kills / 5) * 20;
+      return 350 + Math.floor(kills / 5) * 40;
     }
 
     // ─── TREES ────────────────────────────────────────────────────────
@@ -259,7 +250,7 @@
       stateTimer = 0;
       enemy = null;
       particles = [];
-      enemySpawnTimer = 800;
+      enemySpawnTimer = 500;
     }
 
     function spawnEnemy() {
@@ -302,8 +293,8 @@
           enemy = null;
           state = STATE.WALKING;
           stateTimer = 0;
-          enemySpawnTimer = 1000;
-        }, 800);
+          enemySpawnTimer = 600;
+        }, 600);
       }
     }
 
@@ -322,9 +313,10 @@
         }
       }
 
-      // Walk animation
+      // Walk animation (faster when enemy is approaching)
+      const walkSpeed = (state === STATE.ENCOUNTER) ? 120 : 180;
       walkTimer += dt * 1000;
-      if (walkTimer > 200) {
+      if (walkTimer > walkSpeed) {
         walkTimer = 0;
         walkFrame = 1 - walkFrame;
       }
@@ -389,10 +381,10 @@
 
         case STATE.KO:
           stateTimer += dt * 1000;
-          if (stateTimer > 600) {
+          if (stateTimer > 500) {
             enemy = null;
             state = STATE.WALKING;
-            enemySpawnTimer = Math.max(400, 1000 - kills * 20);
+            enemySpawnTimer = Math.max(300, 700 - kills * 15);
           }
           break;
 
