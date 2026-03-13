@@ -29,6 +29,116 @@
 
   <script>
   (function() {
+    // ─── SOUND SYSTEM ─────────────────────────────────────────────────
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    let audioCtx = null;
+
+    function getAC() {
+      if (!audioCtx) audioCtx = new AudioCtx();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      return audioCtx;
+    }
+
+    function playPunch() {
+      const ac = getAC();
+      const t = ac.currentTime;
+      // Low body thud
+      const osc = ac.createOscillator();
+      const g = ac.createGain();
+      osc.connect(g); g.connect(ac.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(160, t);
+      osc.frequency.exponentialRampToValueAtTime(40, t + 0.18);
+      g.gain.setValueAtTime(0.9, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+      osc.start(t); osc.stop(t + 0.22);
+      // Noise crack
+      const bufSize = Math.floor(ac.sampleRate * 0.08);
+      const buf = ac.createBuffer(1, bufSize, ac.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < bufSize; i++) data[i] = (Math.random() * 2 - 1);
+      const noise = ac.createBufferSource();
+      noise.buffer = buf;
+      const ng = ac.createGain();
+      noise.connect(ng); ng.connect(ac.destination);
+      ng.gain.setValueAtTime(0.6, t);
+      ng.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+      noise.start(t); noise.stop(t + 0.08);
+    }
+
+    function playMiss() {
+      const ac = getAC();
+      const t = ac.currentTime;
+      const osc = ac.createOscillator();
+      const g = ac.createGain();
+      osc.connect(g); g.connect(ac.destination);
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(380, t);
+      osc.frequency.exponentialRampToValueAtTime(80, t + 0.35);
+      g.gain.setValueAtTime(0.25, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+      osc.start(t); osc.stop(t + 0.35);
+    }
+
+    function playKO() {
+      const ac = getAC();
+      const t = ac.currentTime;
+      // Big thud
+      const osc = ac.createOscillator();
+      const g = ac.createGain();
+      osc.connect(g); g.connect(ac.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(220, t);
+      osc.frequency.exponentialRampToValueAtTime(25, t + 0.5);
+      g.gain.setValueAtTime(1.0, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+      osc.start(t); osc.stop(t + 0.55);
+      // Body fall noise
+      const bufSize2 = Math.floor(ac.sampleRate * 0.25);
+      const buf2 = ac.createBuffer(1, bufSize2, ac.sampleRate);
+      const d2 = buf2.getChannelData(0);
+      for (let i = 0; i < bufSize2; i++) d2[i] = (Math.random() * 2 - 1);
+      const noise2 = ac.createBufferSource();
+      noise2.buffer = buf2;
+      const ng2 = ac.createGain();
+      noise2.connect(ng2); ng2.connect(ac.destination);
+      ng2.gain.setValueAtTime(0.4, t);
+      ng2.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+      noise2.start(t + 0.1); noise2.stop(t + 0.35);
+    }
+
+    function playCombo(n) {
+      const ac = getAC();
+      const t = ac.currentTime;
+      const freq = 300 + (n - 2) * 80;
+      const osc = ac.createOscillator();
+      const g = ac.createGain();
+      osc.connect(g); g.connect(ac.destination);
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(freq, t);
+      osc.frequency.setValueAtTime(freq * 1.25, t + 0.07);
+      g.gain.setValueAtTime(0.15, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+      osc.start(t); osc.stop(t + 0.15);
+    }
+
+    function playGameOver() {
+      const ac = getAC();
+      const t = ac.currentTime;
+      const freqs = [400, 320, 260, 200];
+      freqs.forEach((f, i) => {
+        const osc = ac.createOscillator();
+        const g = ac.createGain();
+        osc.connect(g); g.connect(ac.destination);
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(f, t + i * 0.18);
+        g.gain.setValueAtTime(0.22, t + i * 0.18);
+        g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.18 + 0.28);
+        osc.start(t + i * 0.18);
+        osc.stop(t + i * 0.18 + 0.3);
+      });
+    }
+
     // ─── CONSTANTS ────────────────────────────────────────────────────
     let CANVAS_W = window.innerWidth;
     let CANVAS_H = window.innerHeight;
@@ -248,6 +358,8 @@
         spawnParticles(PLAYER_X + 100, GROUND_Y - 80);
         impactStarStep = 0;
         impactStarTimer = 0;
+        playPunch();
+        if (combo > 1) playCombo(combo);
       }
     }
 
@@ -256,10 +368,12 @@
       stateTimer = 0;
       combo = 0;
       lives--;
+      playMiss();
       if (lives <= 0) {
         setTimeout(() => {
           state = STATE.GAME_OVER;
           stateTimer = 0;
+          playGameOver();
         }, 600);
       } else {
         setTimeout(() => {
@@ -365,6 +479,7 @@
               state = STATE.KO;
               stateTimer = 0;
               kills++;
+              playKO();
             }
           }
           break;
