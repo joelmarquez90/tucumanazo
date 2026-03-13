@@ -8,11 +8,8 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       background: #1a0a00;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
+      width: 100vw;
+      height: 100vh;
       overflow: hidden;
       font-family: monospace;
       touch-action: none;
@@ -22,8 +19,6 @@
       image-rendering: pixelated;
       image-rendering: crisp-edges;
       cursor: pointer;
-      max-width: 100vw;
-      max-height: 100vh;
     }
     #landscape-hint { display: none; }
   </style>
@@ -35,8 +30,8 @@
   <script>
   (function() {
     // ─── CONSTANTS ────────────────────────────────────────────────────
-    const CANVAS_W = 800;
-    const CANVAS_H = 450;
+    let CANVAS_W = window.innerWidth;
+    let CANVAS_H = window.innerHeight;
 
     const SPRITE_NAMES = [
       'idle_player','idle_enemy',
@@ -55,18 +50,19 @@
     // ─── CANVAS SETUP ─────────────────────────────────────────────────
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
-    canvas.width = CANVAS_W;
-    canvas.height = CANVAS_H;
 
-    function resizeCanvas() {
-      const maxW = window.innerWidth;
-      const maxH = window.innerHeight;
-      const scale = Math.min(maxW / CANVAS_W, maxH / CANVAS_H);
-      canvas.style.width  = Math.floor(CANVAS_W * scale) + 'px';
-      canvas.style.height = Math.floor(CANVAS_H * scale) + 'px';
+    function updateLayout() {
+      CANVAS_W = window.innerWidth;
+      CANVAS_H = window.innerHeight;
+      canvas.width  = CANVAS_W;
+      canvas.height = CANVAS_H;
+      PLAYER_X    = Math.round(CANVAS_W * 0.22);
+      GROUND_Y    = Math.round(CANVAS_H * 0.87);
+      const charH = CANVAS_H * 0.40;   // characters ≈ 40% of screen height
+      PLAYER_SCALE = charH / 620;       // sprites are ~620 px tall
+      ENEMY_SCALE  = PLAYER_SCALE;
     }
-    resizeCanvas();
-    window.addEventListener('resize', resizeCanvas);
+    window.addEventListener('resize', () => { updateLayout(); initTrees(); });
 
     // ─── SPRITE LOADING ───────────────────────────────────────────────
     let sprites = {}; // { name: HTMLImageElement }
@@ -147,6 +143,13 @@
     let enemy = null; // { x, speed, scale, frame }
     let enemySpawnTimer = 0;
 
+    // Player position — computed dynamically in updateLayout()
+    let PLAYER_X = 0;
+    let GROUND_Y = 0;
+    let PLAYER_SCALE = 0;
+    let ENEMY_SCALE = 0;
+    updateLayout(); // set canvas size + layout vars before anything else
+
     // Background
     let bgScroll = 0;
     let treesLayers = [];
@@ -155,12 +158,6 @@
     // Particles / hit effects
     let particles = [];
 
-    // Player position
-    const PLAYER_X = 200;
-    const GROUND_Y = CANVAS_H - 60;
-    const PLAYER_SCALE = 0.18;
-    const ENEMY_SCALE = 0.18;
-
     // Title animation
     let titleBob = 0;
 
@@ -168,9 +165,9 @@
     function getMissDelay() {
       return Math.max(350, 900 - Math.floor(kills / 5) * 80);
     }
-    // Enemy speed (increases with kills)
+    // Enemy speed (increases with kills, scaled to canvas width)
     function getEnemySpeed() {
-      return 350 + Math.floor(kills / 5) * 40;
+      return (350 + Math.floor(kills / 5) * 40) * CANVAS_W / 800;
     }
 
     // ─── TREES ────────────────────────────────────────────────────────
@@ -181,8 +178,8 @@
         for (let i = 0; i < 8; i++) {
           trees.push({
             x: Math.random() * CANVAS_W * 2,
-            h: (layer === 0 ? 60 : 40) + Math.random() * 40,
-            w: (layer === 0 ? 30 : 20) + Math.random() * 20,
+            h: ((layer === 0 ? 60 : 40) + Math.random() * 40) * CANVAS_H / 450,
+            w: ((layer === 0 ? 30 : 20) + Math.random() * 20) * CANVAS_H / 450,
           });
         }
         treesLayers.push({ trees, speed: layer === 0 ? 0.4 : 0.2 });
@@ -315,7 +312,7 @@
               enemy.animFrame = 1 - enemy.animFrame;
             }
             // When enemy reaches timing zone
-            if (enemy.x < PLAYER_X + 130) {
+            if (enemy.x < PLAYER_X + CANVAS_W * 0.16) {
               state = STATE.TIMING;
               stateTimer = 0;
             }
