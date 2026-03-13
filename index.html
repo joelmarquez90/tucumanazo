@@ -37,20 +37,20 @@
     // ─── CONSTANTS ────────────────────────────────────────────────────
     const CANVAS_W = 800;
     const CANVAS_H = 450;
-    const CELL_W = 704;
-    const CELL_H = 768;
 
-    // Sprite regions in the 2816×1536 sheet
-    const SPR = {
-      idle:    { x: 0,        y: 0,      w: CELL_W,   h: CELL_H },
-      approach:{ x: CELL_W,   y: 0,      w: CELL_W,   h: CELL_H },
-      windup:  { x: CELL_W*2, y: 0,      w: CELL_W,   h: CELL_H },
-      impact1: { x: CELL_W*3, y: 0,      w: CELL_W,   h: CELL_H },
-      blood:   { x: 0,        y: CELL_H, w: CELL_W,   h: CELL_H },
-      stagger: { x: CELL_W,   y: CELL_H, w: CELL_W,   h: CELL_H },
-      ko:      { x: CELL_W*2, y: CELL_H, w: CELL_W,   h: CELL_H },
-      walk_ab: { x: CELL_W*3, y: CELL_H, w: CELL_W,   h: CELL_H }, // full last cell (2 walk frames)
-    };
+    const SPRITE_NAMES = [
+      'idle_player','idle_enemy',
+      'approach_player','approach_enemy',
+      'windup_player','windup_enemy',
+      'impact1_player','impact1_enemy',
+      'blood_player','blood_enemy',
+      'stagger_player','stagger_enemy',
+      'ko_player','ko_enemy',
+      'player_walk_0','player_walk_1','player_walk_2','player_walk_3',
+      'player_walk_4','player_walk_5','player_walk_6','player_walk_7',
+      'enemy_walk_0','enemy_walk_1','enemy_walk_2','enemy_walk_3',
+      'enemy_walk_4','enemy_walk_5','enemy_walk_6','enemy_walk_7',
+    ];
 
     // ─── CANVAS SETUP ─────────────────────────────────────────────────
     const canvas = document.getElementById('gameCanvas');
@@ -68,85 +68,49 @@
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
 
-    // ─── SPRITE SHEET LOADING + CHROMA KEY ───────────────────────────
-    let spriteCanvas = null;
+    // ─── SPRITE LOADING ───────────────────────────────────────────────
+    let sprites = {}; // { name: HTMLImageElement }
     let spriteReady = false;
 
-    function applyChromaKey(sctx, w, h) {
-      const imageData = sctx.getImageData(0, 0, w, h);
-      const d = imageData.data;
-      for (let i = 0; i < d.length; i += 4) {
-        const r = d[i], g = d[i+1], b = d[i+2];
-        if (g > 100 && g > r * 1.2 && g > b * 1.2 && g > 80) d[i+3] = 0;
-      }
-      sctx.putImageData(imageData, 0, 0);
-    }
-
     function loadSprites(cb) {
-      function tryLoad(withCORS) {
+      let loaded = 0;
+      let failed = false;
+      for (const name of SPRITE_NAMES) {
         const img = new Image();
         img.onload = function() {
-          const sc = document.createElement('canvas');
-          sc.width = img.width;
-          sc.height = img.height;
-          const sctx = sc.getContext('2d');
-          sctx.drawImage(img, 0, 0);
-          try {
-            applyChromaKey(sctx, sc.width, sc.height);
-          } catch (e) {
-            if (withCORS) { tryLoad(false); return; }
-            // file:// without CORS: sprites render with green bg, still usable
-            console.warn('Chroma key skipped (file:// context)');
-          }
-          spriteCanvas = sc;
-          spriteReady = true;
-          cb();
+          sprites[name] = img;
+          if (++loaded === SPRITE_NAMES.length) { spriteReady = true; cb(); }
         };
         img.onerror = function() {
-          if (withCORS) { tryLoad(false); return; }
-          spriteReady = false;
-          cb();
+          if (!failed) { failed = true; spriteReady = false; cb(); }
         };
-        if (withCORS) img.crossOrigin = 'anonymous';
-        img.src = 'assets/sprites.png';
+        img.src = `assets/sprites/${name}.png`;
       }
-      tryLoad(true);
     }
 
-    // Draw a sprite region onto the main canvas
-    // sx,sy = dest position (center-bottom of sprite)
+    // Draw a named sprite onto the main canvas
+    // dx,dy = dest position (center-bottom of sprite)
     // scale = display scale
     // flip = mirror horizontally
-    function drawSprite(region, dx, dy, scale, flip) {
-      if (!spriteReady || !spriteCanvas) return;
-      const dw = region.w * scale;
-      const dh = region.h * scale;
+    function drawSprite(name, dx, dy, scale, flip) {
+      const img = sprites[name];
+      if (!img) return;
+      const dw = img.naturalWidth * scale;
+      const dh = img.naturalHeight * scale;
       ctx.save();
       if (flip) {
         ctx.translate(dx, dy);
         ctx.scale(-1, 1);
-        ctx.drawImage(spriteCanvas,
-          region.x, region.y, region.w, region.h,
-          -dw/2, -dh, dw, dh);
+        ctx.drawImage(img, -dw/2, -dh, dw, dh);
       } else {
-        ctx.drawImage(spriteCanvas,
-          region.x, region.y, region.w, region.h,
-          dx - dw/2, dy - dh, dw, dh);
+        ctx.drawImage(img, dx - dw/2, dy - dh, dw, dh);
       }
       ctx.restore();
     }
 
-    // Draw one of the two walk frames (left half or right half of walk_ab)
     function drawWalkFrame(frame, dx, dy, scale, flip) {
-      if (!spriteReady || !spriteCanvas) return;
-      const halfW = CELL_W / 2;
-      const region = {
-        x: SPR.walk_ab.x + (frame === 0 ? 0 : halfW),
-        y: SPR.walk_ab.y,
-        w: halfW,
-        h: CELL_H
-      };
-      drawSprite(region, dx, dy, scale, flip);
+      const prefix = flip ? 'enemy_walk' : 'player_walk';
+      drawSprite(`${prefix}_${frame}`, dx, dy, scale, flip);
     }
 
     // ─── GAME STATE ───────────────────────────────────────────────────
@@ -314,11 +278,11 @@
       }
 
       // Walk animation (faster when enemy is approaching)
-      const walkSpeed = (state === STATE.ENCOUNTER) ? 120 : 180;
+      const walkSpeed = (state === STATE.ENCOUNTER) ? 60 : 80;
       walkTimer += dt * 1000;
       if (walkTimer > walkSpeed) {
         walkTimer = 0;
-        walkFrame = 1 - walkFrame;
+        walkFrame = (walkFrame + 1) % 8;
       }
 
       // Particles
@@ -486,7 +450,7 @@
 
     function drawPlayer(sprName) {
       if (spriteReady) {
-        drawSprite(SPR[sprName] || SPR.idle, PLAYER_X, GROUND_Y, PLAYER_SCALE, false);
+        drawSprite(`${sprName}_player`, PLAYER_X, GROUND_Y, PLAYER_SCALE, false);
       } else {
         drawPlaceholderChar(PLAYER_X, GROUND_Y, '#e8c060', false, 'PLAYER');
       }
@@ -503,11 +467,11 @@
     function drawEnemy(sprName, flip) {
       if (!enemy) return;
       if (spriteReady) {
-        // Enemy uses idle/approach for walking toward player
         if (sprName === 'walk') {
           drawWalkFrame(enemy.animFrame, enemy.x, GROUND_Y, ENEMY_SCALE, true);
         } else {
-          drawSprite(SPR[sprName] || SPR.idle, enemy.x, GROUND_Y, ENEMY_SCALE, true);
+          // _enemy sprites are already facing left (toward player) — no flip
+          drawSprite(`${sprName}_enemy`, enemy.x, GROUND_Y, ENEMY_SCALE, false);
         }
       } else {
         drawPlaceholderChar(enemy.x, GROUND_Y, '#cc4040', true);
