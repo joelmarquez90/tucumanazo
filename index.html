@@ -42,10 +42,6 @@
       'stagger_player','stagger_enemy',
       'ko_player','ko_enemy',
       'star_0','star_1','star_2','star_3',
-      'player_walk_0','player_walk_1','player_walk_2','player_walk_3',
-      'player_walk_4','player_walk_5','player_walk_6','player_walk_7',
-      'enemy_walk_0','enemy_walk_1','enemy_walk_2','enemy_walk_3',
-      'enemy_walk_4','enemy_walk_5','enemy_walk_6','enemy_walk_7',
     ];
 
     // ─── CANVAS SETUP ─────────────────────────────────────────────────
@@ -133,6 +129,14 @@
     let lastTime = 0;
     let walkFrame = 0;
     let walkTimer = 0;
+
+    // Player idle animation (idle_player ↔ approach_player)
+    let playerIdleFrame = 0;  // 0 = idle, 1 = approach
+    let playerIdleTimer = 0;
+    const PLAYER_IDLE_SPEED = 600; // ms per frame
+
+    // Enemy walk animation now uses approach_enemy ↔ idle_enemy
+    // (reuses enemy.animFrame / enemy.animTimer)
 
     // Headbutt animation sequence
     const HEADBUTT_FRAMES = ['windup','impact1','blood','stagger','ko'];
@@ -282,12 +286,19 @@
         }
       }
 
-      // Walk animation (faster when enemy is approaching)
+      // Walk animation (for enemy walk sprites — kept for reference)
       const walkSpeed = (state === STATE.ENCOUNTER) ? 60 : 80;
       walkTimer += dt * 1000;
       if (walkTimer > walkSpeed) {
         walkTimer = 0;
         walkFrame = (walkFrame + 1) % 8;
+      }
+
+      // Player idle animation
+      playerIdleTimer += dt * 1000;
+      if (playerIdleTimer > PLAYER_IDLE_SPEED) {
+        playerIdleTimer = 0;
+        playerIdleFrame = 1 - playerIdleFrame;
       }
 
       // Impact star animation
@@ -330,7 +341,7 @@
               enemy.animFrame = 1 - enemy.animFrame;
             }
             // When enemy reaches timing zone
-            if (enemy.x < PLAYER_X + CANVAS_W * 0.16) {
+            if (enemy.x < PLAYER_X + CANVAS_W * 0.11) {
               state = STATE.TIMING;
               stateTimer = 0;
             }
@@ -473,7 +484,8 @@
 
     function drawPlayerWalk() {
       if (spriteReady) {
-        drawWalkFrame(walkFrame, PLAYER_X, GROUND_Y, PLAYER_SCALE, false);
+        const name = playerIdleFrame === 0 ? 'idle_player' : 'approach_player';
+        drawSprite(name, PLAYER_X, GROUND_Y, PLAYER_SCALE, false);
       } else {
         drawPlaceholderChar(PLAYER_X, GROUND_Y, '#e8c060', false);
       }
@@ -483,7 +495,12 @@
       if (!enemy) return;
       if (spriteReady) {
         if (sprName === 'walk') {
-          drawWalkFrame(enemy.animFrame, enemy.x, GROUND_Y, ENEMY_SCALE, true);
+          // Alternate between approach_enemy and idle_enemy while walking
+          const name = enemy.animFrame === 0 ? 'approach_enemy' : 'idle_enemy';
+          drawSprite(name, enemy.x, GROUND_Y, ENEMY_SCALE, false);
+        } else if (sprName === 'ko') {
+          // KO lying down: flip so feet point toward player (left)
+          drawSprite('ko_enemy', enemy.x, GROUND_Y, ENEMY_SCALE, true);
         } else {
           // _enemy sprites are already facing left (toward player) — no flip
           drawSprite(`${sprName}_enemy`, enemy.x, GROUND_Y, ENEMY_SCALE, false);

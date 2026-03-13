@@ -24,16 +24,20 @@ PLAYER_NAMES = ['idle_player', 'approach_player', 'windup2_player',
                 'windup_player', 'impact1_player', None]
 
 # Row 1 — enemy (frames 0-2 auto, 3-5 split from large block x=956..2075):
+# KO frame detected at x=1346..2075 in y=1300..1530 (lying down, bottom of row)
 ENEMY_X_RANGES = [
     (71, 310),    # 0: walk/approach
     (378, 598),   # 1: idle ready
     (658, 936),   # 2: first hit reaction
     (956, 1245),  # 3: blood (hands on face)  ← manual split
     (1245, 1680), # 4: stagger                ← manual split
-    (1680, 2076), # 5: KO lying down          ← manual split
+    (1340, 2128), # 5: KO lying down — starts at 1340 (detected via alpha scan)
 ]
 ENEMY_NAMES = ['approach_enemy', 'idle_enemy', 'blood_enemy',
                'stagger_enemy', 'stagger2_enemy', 'ko_enemy']
+
+# KO frame uses a narrower y range to avoid overlap with stagger2 (standing)
+ENEMY_KO_Y = (1300, 1530)
 
 # Row 2 — effects (auto-detected):
 EFFECT_X_RANGES = [
@@ -79,10 +83,16 @@ for (x0, x1), name in zip(PLAYER_X_RANGES, PLAYER_NAMES):
 
 # Enemy frames (flip horizontally so they face LEFT)
 y0, y1 = ROW_Y_RANGES['enemy']
-for (x0, x1), name in zip(ENEMY_X_RANGES, ENEMY_NAMES):
-    cell = arr[y0:y1, x0:x1].copy()
+for i, ((x0, x1), name) in enumerate(zip(ENEMY_X_RANGES, ENEMY_NAMES)):
+    is_ko = i == len(ENEMY_X_RANGES) - 1
+    ey0, ey1 = ENEMY_KO_Y if is_ko else (y0, y1)
+    cell = arr[ey0:ey1, x0:x1].copy()
     flipped = np.fliplr(cell)
-    save(tight_crop(flipped), f'assets/sprites/{name}.png')
+    cropped = tight_crop(flipped)
+    if is_ko:
+        # Trim the right side where stagger2 body bleeds in (starts at x=534)
+        cropped = cropped[:, :534]
+    save(cropped, f'assets/sprites/{name}.png')
 
 # Effect frames (no flip)
 y0, y1 = ROW_Y_RANGES['effects']
