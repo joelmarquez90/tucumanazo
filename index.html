@@ -41,6 +41,7 @@
       'blood_player','blood_enemy',
       'stagger_player','stagger_enemy',
       'ko_player','ko_enemy',
+      'star_0','star_1','star_2','star_3',
       'player_walk_0','player_walk_1','player_walk_2','player_walk_3',
       'player_walk_4','player_walk_5','player_walk_6','player_walk_7',
       'enemy_walk_0','enemy_walk_1','enemy_walk_2','enemy_walk_3',
@@ -139,6 +140,11 @@
     let headbuttTimer = 0;
     const HEADBUTT_TIMINGS = [120, 100, 120, 150, 300]; // ms per frame
 
+    // Impact star animation
+    let impactStarStep = -1;   // -1 = inactive
+    let impactStarTimer = 0;
+    const IMPACT_STAR_SPEED = 80; // ms per frame
+
     // Enemy state
     let enemy = null; // { x, speed, scale, frame }
     let enemySpawnTimer = 0;
@@ -236,6 +242,8 @@
           localStorage.setItem('tucumanazo_hs', highScore);
         }
         spawnParticles(PLAYER_X + 100, GROUND_Y - 80);
+        impactStarStep = 0;
+        impactStarTimer = 0;
       }
     }
 
@@ -280,6 +288,16 @@
       if (walkTimer > walkSpeed) {
         walkTimer = 0;
         walkFrame = (walkFrame + 1) % 8;
+      }
+
+      // Impact star animation
+      if (impactStarStep >= 0) {
+        impactStarTimer += dt * 1000;
+        if (impactStarTimer > IMPACT_STAR_SPEED) {
+          impactStarTimer = 0;
+          impactStarStep++;
+          if (impactStarStep >= 4) impactStarStep = -1;
+        }
       }
 
       // Particles
@@ -675,6 +693,14 @@
             drawEnemy('stagger', true);
           }
           drawParticles();
+          // Impact star overlay
+          if (impactStarStep >= 0 && sprites[`star_${impactStarStep}`]) {
+            const starScale = PLAYER_SCALE * 2.5;
+            drawSprite(`star_${impactStarStep}`,
+              enemy.x - ENEMY_SCALE * 80,
+              GROUND_Y - ENEMY_SCALE * 620 * 0.75,
+              starScale, false);
+          }
           break;
         }
 
